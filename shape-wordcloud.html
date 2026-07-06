@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shape Word Cloud — Generator</title>
+<style>
+  :root{
+    --bg:#0d0e12; --panel:#15171e; --line:#262a35; --text:#e7e9ef;
+    --muted:#8a90a2; --accent:#ff5a3c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
+  .app{display:grid;grid-template-columns:380px 1fr;height:100vh;}
+  .app.display-only{grid-template-columns:1fr;}
+  .app.input-only{grid-template-columns:1fr;}
+
+  .panel{background:var(--panel);border-right:1px solid var(--line);
+    padding:24px;overflow-y:auto;display:flex;flex-direction:column;gap:20px;}
+  .display-only .panel{display:none;}
+  .brand{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  h1{font-size:20px;margin:6px 0 0;font-weight:650;}
+  label.fld{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:7px;}
+  input[type=text]{width:100%;background:#1c1f28;border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:12px 13px;font-size:15px;}
+  input[type=text]:focus{outline:none;border-color:#3d5cff;}
+  .drop{border:1.5px dashed #33384a;border-radius:12px;padding:18px;text-align:center;
+    cursor:pointer;transition:.15s;background:#171a22;}
+  .drop:hover{border-color:#4a5270;background:#1b1f2a;}
+  .drop .big{font-size:14px;font-weight:600;}
+  .drop .sub{font-size:12px;color:var(--muted);margin-top:4px;}
+  .drop.has{border-style:solid;border-color:#2f6b4f;background:#14201a;}
+  .row{display:flex;gap:10px;flex-wrap:wrap;}
+  .btn{appearance:none;cursor:pointer;border-radius:9px;font-size:13px;font-weight:600;
+    padding:10px 13px;border:1px solid var(--line);background:#1c1f28;color:var(--text);}
+  .btn:hover{background:#242836;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#1a0d09;}
+  .btn.ghost{background:transparent;color:var(--muted);}
+  .btn.danger{color:#ff8f7a;border-color:#40272a;}
+  .hint{font-size:12px;color:var(--muted);line-height:1.55;}
+  .sep{height:1px;background:var(--line);}
+  .top{display:flex;flex-direction:column;gap:6px;}
+  .top .w{display:flex;justify-content:space-between;font-size:13px;padding:5px 9px;border-radius:7px;background:#171a22;}
+  .top .w b{color:var(--text);font-variant-numeric:tabular-nums;}
+  .total{font-size:13px;color:var(--muted);}
+  .total b{color:var(--text)}
+
+  /* stage */
+  .stage{position:relative;overflow:hidden;background:
+     radial-gradient(1200px 800px at 50% 42%, #171a24 0%, var(--bg) 70%);}
+  .stage canvas{display:block;width:100%;height:100%;}
+  .stage .heading{position:absolute;top:26px;left:0;right:0;text-align:center;pointer-events:none;z-index:2;}
+  .stage .heading .kick{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);}
+  .stage .heading .qt{font-size:22px;font-weight:650;margin-top:5px;}
+  .stage .foot{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--muted);font-size:12px;z-index:2;pointer-events:none;}
+  .toolbar{position:absolute;top:14px;right:16px;z-index:3;display:flex;gap:8px;}
+  .display-only .toolbar .hideDisp{display:none;}
+
+  /* input/form mode */
+  .form-wrap{display:none;}
+  .input-only .app,.input-only{}
+  .input-only .panel,.input-only .stage{display:none;}
+  .input-only .form-wrap{display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px;}
+  .card{width:100%;max-width:440px;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;padding:30px 26px;display:flex;flex-direction:column;gap:18px;}
+  .card .kick{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+  .card h2{margin:0;font-size:23px;font-weight:680;line-height:1.25;}
+  .card .ok{font-size:14px;color:#54e0c7;min-height:18px;}
+  .card .cnt{font-size:12px;color:var(--muted);text-align:center;}
+  .big-btn{appearance:none;cursor:pointer;border:none;border-radius:11px;padding:14px;
+    font-size:16px;font-weight:650;background:var(--accent);color:#1a0d09;}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+  <!-- ADMIN PANEL -->
+  <aside class="panel">
+    <div><div class="brand">Shape Word Cloud · Generator</div><h1 id="p-title">Live Word Cloud</h1></div>
+
+    <div>
+      <label class="fld">Display shape (vector)</label>
+      <div class="drop" id="drop">
+        <div class="big" id="drop-big">Upload an SVG shape</div>
+        <div class="sub" id="drop-sub">Click or drop a .svg file · solid silhouette, transparent background</div>
+      </div>
+      <input type="file" id="file" accept=".svg,image/svg+xml" style="display:none">
+    </div>
+
+    <div>
+      <label class="fld" for="prompt">Prompt shown to attendees</label>
+      <input type="text" id="prompt" value="Describe our event in one word">
+    </div>
+
+    <div class="sep"></div>
+
+    <div class="total">Submissions: <b id="p-total">0</b> · <span id="p-uniq">0</span> unique</div>
+    <div class="top" id="p-top"></div>
+
+    <div class="sep"></div>
+    <div class="row">
+      <button class="btn" id="btn-sim">Simulate answers</button>
+      <button class="btn danger" id="btn-reset">Reset</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="btn-form">Open attendee form ↗</button>
+      <button class="btn ghost" id="btn-display">Open display ↗</button>
+    </div>
+    <div class="hint" id="sync-note">
+      Attendees submit words on the <b>form</b> link; the <b>display</b> goes on the projector.
+      Words are sized by how often they’re submitted and packed into your shape.
+    </div>
+  </aside>
+
+  <!-- DISPLAY STAGE -->
+  <main class="stage" id="stage">
+    <div class="toolbar"><button class="btn ghost hideDisp" id="btn-fs">Fullscreen</button></div>
+    <div class="heading"><div class="kick">Live now</div><div class="qt" id="d-qt"></div></div>
+    <canvas id="cloud"></canvas>
+    <div class="foot" id="d-foot">Prototype · size = how many people submitted the word</div>
+  </main>
+
+  <!-- ATTENDEE FORM (mode=input) -->
+  <div class="form-wrap">
+    <form class="card" id="form">
+      <div class="kick">Add your word</div>
+      <h2 id="f-prompt">Describe our event in one word</h2>
+      <input type="text" id="f-input" placeholder="Type a word…" autocomplete="off" maxlength="28">
+      <button class="big-btn" type="submit">Submit</button>
+      <div class="ok" id="f-ok"></div>
+      <div class="cnt" id="f-cnt"></div>
+    </form>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG
+   ===================================================================== */
+const CONFIG = {
+  storageKey: "swc_counts_v1",
+  shapeKey:   "swc_shape_v1",
+  promptKey:  "swc_prompt_v1",
+  sampleWords: ["Design","Bold","Playful","Community","Innovative","Creative","Fun","Vibrant",
+    "Modern","Inspiring","Fresh","Energy","Human","Warm","Clever","Colorful","Craft","Future",
+    "Joy","Curious","Authentic","Local","Dream","Spark"]
+};
+
+// Default shape: a 5-point star (until the admin uploads their own SVG)
+const DEFAULT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,2 62,37 99,38 69,60 80,97 50,74 20,97 31,60 1,38 38,37" fill="#000"/></svg>';
+
+/* =====================================================================
+   STORE  (localStorage-backed, guarded for file:// / private mode)
+   ===================================================================== */
+let storageOK = true;
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ storageOK=false; return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){ storageOK=false; } }
+
+function loadCounts(){ try{ return JSON.parse(lsGet(CONFIG.storageKey))||{}; }catch(e){ return {}; } }
+let counts = loadCounts();
+function saveCounts(){ lsSet(CONFIG.storageKey, JSON.stringify(counts)); }
+
+// normalise so "DESIGN", "design", " Design " all merge into one word
+function normalize(w){
+  w=(w||"").trim().replace(/\s+/g," ").slice(0,28);
+  if(!w) return "";
+  return w.toLowerCase().replace(/\b\p{L}/gu, c=>c.toUpperCase());
+}
+function addWord(raw){
+  const w=normalize(raw); if(!w) return false;
+  counts[w]=(counts[w]||0)+1; saveCounts(); render(); return true;
+}
+function reset(){ counts={}; saveCounts(); render(); }
+function simulate(n){
+  let s=987654;
+  const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+  for(let i=0;i<n;i++){
+    // zipf-ish: favour earlier sample words so a clear winner emerges
+    const idx=Math.floor(Math.pow(rnd(),2)*CONFIG.sampleWords.length);
+    addWordSilent(CONFIG.sampleWords[idx]);
+  }
+  saveCounts(); render();
+}
+function addWordSilent(raw){ const w=normalize(raw); if(w) counts[w]=(counts[w]||0)+1; }
+
+/* =====================================================================
+   MODE
+   ===================================================================== */
+const mode=new URLSearchParams(location.search).get("mode");
+const app=document.getElementById("app");
+if(mode==="display") app.classList.add("display-only");
+if(mode==="input")   app.classList.add("input-only");
+
+/* =====================================================================
+   PROMPT (synced)
+   ===================================================================== */
+function currentPrompt(){ return lsGet(CONFIG.promptKey) || "Describe our event in one word"; }
+function applyPrompt(p){
+  document.getElementById("d-qt").textContent=p;
+  document.getElementById("f-prompt").textContent=p;
+  const pin=document.getElementById("prompt"); if(pin && pin.value!==p) pin.value=p;
+}
+
+/* =====================================================================
+   WORD-CLOUD ENGINE  (pack words to FILL the uploaded shape)
+   ===================================================================== */
+const canvas=document.getElementById("cloud");
+const ctx=canvas.getContext("2d");
+const COLORS=["#ff5a3c","#ffcf5c","#4ea1ff","#54e0c7","#c88bff","#ff8fae","#9fe870","#ffa24e"];
+const GRID=4;
+let W=0,H=0,DPR=1, mask=null, gridW=0, gridH=0, anchors=null, shapeImg=null;
+
+function sizeCanvas(){
+  const st=document.getElementById("stage");
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=st.clientWidth; H=st.clientHeight;
+  canvas.width=Math.floor(W*DPR); canvas.height=Math.floor(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  buildMask(); render();
+}
+
+// rasterise the current shape image into a boolean inside-grid
+function buildMask(){
+  gridW=Math.ceil(W/GRID); gridH=Math.ceil(H/GRID);
+  mask=new Uint8Array(gridW*gridH);
+  anchors=[];
+  if(!shapeImg){ return; }
+  // fit the shape image (preserve aspect) into ~86% of the stage
+  const off=document.createElement("canvas"); off.width=W; off.height=H;
+  const o=off.getContext("2d");
+  const iw=shapeImg.naturalWidth||shapeImg.width||100, ih=shapeImg.naturalHeight||shapeImg.height||100;
+  const s=Math.min(W*0.9/iw, H*0.82/ih);
+  const dw=iw*s, dh=ih*s, dx=(W-dw)/2, dy=(H-dh)/2 + H*0.02;
+  o.drawImage(shapeImg, dx,dy,dw,dh);
+  const data=o.getImageData(0,0,W,H).data;
+  const cx=gridW/2, cy=gridH/2;
+  for(let gy=0;gy<gridH;gy++) for(let gx=0;gx<gridW;gx++){
+    const px=Math.min(W-1,gx*GRID+2), py=Math.min(H-1,gy*GRID+2);
+    if(data[(py*W+px)*4+3]>60){
+      mask[gy*gridW+gx]=1;
+      const d=(gx-cx)*(gx-cx)+(gy-cy)*(gy-cy);
+      anchors.push([gx,gy,d]);
+    }
+  }
+  anchors.sort((a,b)=>a[2]-b[2]);   // centre-out
+}
+
+function loadShape(svgText, rebuild){
+  const withSize=ensureSvgSize(svgText);
+  const img=new Image();
+  img.onload=()=>{ shapeImg=img; if(rebuild!==false){ buildMask(); render(); } };
+  img.onerror=()=>{ /* keep previous shape */ };
+  img.src="data:image/svg+xml;base64,"+btoa(unescape(encodeURIComponent(withSize)));
+}
+// SVGs often omit width/height (only viewBox) → give them an explicit size so
+// the browser rasterises them at a real resolution.
+function ensureSvgSize(svg){
+  if(/<svg[^>]*\swidth=/.test(svg)) return svg;
+  const vb=svg.match(/viewBox\s*=\s*["']([\d.\-\s]+)["']/);
+  let w=600,h=600;
+  if(vb){ const p=vb[1].trim().split(/[\s,]+/).map(Number); if(p.length===4){ w=p[2]; h=p[3]; } }
+  return svg.replace(/<svg/i, `<svg width="${w}" height="${h}"`);
+}
+
+function cellInside(gx,gy){ return gx>=0&&gy>=0&&gx<gridW&&gy<gridH&&mask[gy*gridW+gx]===1; }
+
+// try to place a word (horizontal, then vertical) inside the mask without overlap
+function place(occ, word, fs){
+  ctx.font=`700 ${fs}px -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
+  const wpx=ctx.measureText(word).width, hpx=fs*1.02;
+  const pad=Math.max(3, fs*0.14);
+  for(const orient of ["h","v"]){
+    const boxW = orient==="h" ? wpx+pad*2 : hpx+pad*2;
+    const boxH = orient==="h" ? hpx+pad*2 : wpx+pad*2;
+    const cw=Math.max(1,Math.ceil(boxW/GRID)), ch=Math.max(1,Math.ceil(boxH/GRID));
+    const tol=Math.floor(cw*ch*0.07);
+    const halfW=cw>>1, halfH=ch>>1;
+    for(let a=0;a<anchors.length;a++){
+      const ax=anchors[a][0]-halfW, ay=anchors[a][1]-halfH;
+      let ok=true, out=0;
+      for(let yy=0; yy<ch && ok; yy++){
+        for(let xx=0; xx<cw; xx++){
+          const gx=ax+xx, gy=ay+yy;
+          if(gx<0||gy<0||gx>=gridW||gy>=gridH||occ[gy*gridW+gx]){ ok=false; break; }
+          if(mask[gy*gridW+gx]!==1 && ++out>tol){ ok=false; break; }
+        }
+      }
+      if(ok){
+        for(let yy=0;yy<ch;yy++) for(let xx=0;xx<cw;xx++) occ[(ay+yy)*gridW+(ax+xx)]=1;
+        return { cx:(ax+cw/2)*GRID, cy:(ay+ch/2)*GRID, orient };
+      }
+    }
+  }
+  return null;
+}
+
+function render(){
+  // panel stats
+  const entries=Object.entries(counts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+  const total=entries.reduce((s,[,c])=>s+c,0);
+  const pt=document.getElementById("p-total"); if(pt) pt.textContent=total;
+  const pu=document.getElementById("p-uniq"); if(pu) pu.textContent=entries.length;
+  const top=document.getElementById("p-top");
+  if(top){ top.innerHTML=entries.slice(0,8).map(([w,c])=>`<div class="w"><span>${w}</span><b>${c}</b></div>`).join(""); }
+  const fc=document.getElementById("f-cnt"); if(fc) fc.textContent = total? `${total} words so far` : "";
+
+  if(!ctx) return;
+  ctx.clearRect(0,0,W,H);
+  if(shapeImg) drawGhost();
+
+  if(entries.length===0){ drawEmpty(); return; }
+  if(!anchors || !anchors.length){ drawEmpty("Upload a shape to begin…"); return; }
+
+  const maxC=entries[0][1];
+  const base=Math.min(W,H);
+  const minF=Math.max(14, base*0.03);
+  const maxF=base*0.17;
+  const occ=new Uint8Array(gridW*gridH);
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+
+  entries.forEach(([word,c],idx)=>{
+    const t = maxC<=1 ? 1 : c/maxC;                 // linear → strong contrast
+    let fs = minF + Math.pow(t,0.8)*(maxF-minF);
+    let pos=null;
+    for(let attempt=0; attempt<7 && !pos; attempt++){
+      pos=place(occ, word, fs);
+      if(!pos) fs*=0.84;
+    }
+    if(!pos) return;
+    ctx.save();
+    ctx.font=`700 ${fs}px -apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif`;
+    ctx.fillStyle = idx===0 ? "#ffffff" : COLORS[idx % COLORS.length];
+    ctx.translate(pos.cx, pos.cy);
+    if(pos.orient==="v") ctx.rotate(-Math.PI/2);
+    if(idx===0){ ctx.shadowColor="rgba(255,90,60,.5)"; ctx.shadowBlur=fs*0.3; }
+    ctx.fillText(word, 0, 0);
+    ctx.restore();
+  });
+}
+
+function drawGhost(){
+  const iw=shapeImg.naturalWidth||100, ih=shapeImg.naturalHeight||100;
+  const s=Math.min(W*0.9/iw, H*0.82/ih);
+  const dw=iw*s, dh=ih*s;
+  ctx.globalAlpha=0.06; ctx.drawImage(shapeImg,(W-dw)/2,(H-dh)/2+H*0.02,dw,dh); ctx.globalAlpha=1;
+}
+function drawEmpty(msg){
+  ctx.save(); ctx.globalAlpha=.55; ctx.fillStyle="#8a90a2";
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  ctx.font="500 18px -apple-system,Segoe UI,Roboto,sans-serif";
+  ctx.fillText(msg||"Waiting for the first words…", W/2, H*0.5);
+  ctx.restore();
+}
+
+/* =====================================================================
+   WIRING
+   ===================================================================== */
+// shape upload
+const drop=document.getElementById("drop"), fileInput=document.getElementById("file");
+function markShapeLoaded(name){
+  drop.classList.add("has");
+  document.getElementById("drop-big").textContent = name ? ("Shape: "+name) : "Custom shape loaded";
+  document.getElementById("drop-sub").textContent = "Click to replace";
+}
+function handleFile(file){
+  if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{ const txt=r.result; lsSet(CONFIG.shapeKey, txt); loadShape(txt,true); markShapeLoaded(file.name); };
+  r.readAsText(file);
+}
+if(drop){
+  drop.addEventListener("click",()=>fileInput.click());
+  fileInput.addEventListener("change",e=>handleFile(e.target.files[0]));
+  ["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor="#4a5270";}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.style.borderColor="";}));
+  drop.addEventListener("drop",e=>handleFile(e.dataTransfer.files[0]));
+}
+
+// prompt editing (admin)
+const promptInput=document.getElementById("prompt");
+if(promptInput){
+  promptInput.addEventListener("input",()=>{ lsSet(CONFIG.promptKey, promptInput.value); applyPrompt(promptInput.value); });
+}
+
+document.getElementById("btn-reset").addEventListener("click",reset);
+document.getElementById("btn-sim").addEventListener("click",()=>simulate(30));
+document.getElementById("btn-form").addEventListener("click",()=>window.open(location.pathname+"?mode=input","_blank"));
+document.getElementById("btn-display").addEventListener("click",()=>window.open(location.pathname+"?mode=display","_blank"));
+document.getElementById("btn-fs").addEventListener("click",()=>{
+  const el=document.getElementById("stage");
+  if(!document.fullscreenElement) el.requestFullscreen?.(); else document.exitFullscreen?.();
+});
+
+// attendee form
+const form=document.getElementById("form");
+if(form){
+  form.addEventListener("submit",e=>{
+    e.preventDefault();
+    const inp=document.getElementById("f-input");
+    if(addWord(inp.value)){
+      document.getElementById("f-ok").textContent="Added — thanks! Add another?";
+      inp.value=""; inp.focus();
+    }
+  });
+}
+
+// cross-window sync
+window.addEventListener("storage",e=>{
+  if(e.key===CONFIG.storageKey){ counts=loadCounts(); render(); }
+  else if(e.key===CONFIG.shapeKey && e.newValue){ loadShape(e.newValue,true); }
+  else if(e.key===CONFIG.promptKey){ applyPrompt(currentPrompt()); }
+});
+window.addEventListener("resize", sizeCanvas);
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+applyPrompt(currentPrompt());
+const savedShape=lsGet(CONFIG.shapeKey);
+loadShape(savedShape || DEFAULT_SVG, true);   // rebuild mask once the shape image loads
+if(savedShape) markShapeLoaded();
+sizeCanvas();
+
+if(!storageOK){
+  const note=document.getElementById("sync-note");
+  if(note) note.innerHTML="⚠︎ Storage blocked (opened as a file). It still works in one window, but the form/display sync needs it served over http:// — see the hosted link.";
+  document.getElementById("d-foot").textContent="Prototype · single-window mode";
+}
+</script>
+</body>
+</html>
