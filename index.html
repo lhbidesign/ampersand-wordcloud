@@ -125,7 +125,7 @@
         <text id="txt3" fill="rgba(231,233,239,.30)"><textPath id="tp3" href="#ring3" startOffset="0"></textPath></text>
         <text id="txt2" fill="rgba(231,233,239,.42)"><textPath id="tp2" href="#ring2" startOffset="0"></textPath></text>
         <text id="txt1" fill="rgba(231,233,239,.60)"><textPath id="tp1" href="#ring1" startOffset="0"></textPath></text>
-        <text id="ampText" fill="rgba(231,233,239,.85)"><textPath id="ampTP" href="#ampPath" startOffset="0"></textPath></text>
+        <g id="outlineLayer" fill="rgba(231,233,239,.85)"></g>
       </g>
     </svg>
 
@@ -152,8 +152,8 @@ const AMP_D = "M907.8 429.6Q872.9 432.6 837.4 443.5Q801.9 454.5 783.0 478.1Q770.
 // colour by popularity rank: winner = warm accent, then a small palette, rest = soft white
 const RANK_COLORS = ["#ff6a4d","#ffd15c","#5ab0ff","#54e0c7","#c88bff","#ff8fae"];
 const REST_COLOR   = "rgba(231,233,239,.78)";
-const MINF = 17;   // smallest word (viewBox units)
-const MAXF = 41;   // largest word
+const MINF = 15;   // smallest word (viewBox units)
+const MAXF = 66;   // largest word — wide spread so a runaway winner clearly dominates
 
 /* =====================================================================
    STATE  (shared across windows via localStorage + storage events)
@@ -264,17 +264,35 @@ function buildRing(dist){
   return polys.map(poly=>"M"+poly.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L")).join(" ");
 }
 const RINGS = [
-  { el:document.getElementById("ampTP"), path:ampEl,                            freq:true },
-  { el:document.getElementById("tp1"),   path:document.getElementById("ring1"), fs:15.5, off:7 },
-  { el:document.getElementById("tp2"),   path:document.getElementById("ring2"), fs:13,   off:3 },
-  { el:document.getElementById("tp3"),   path:document.getElementById("ring3"), fs:11.5, off:11 },
+  { el:document.getElementById("tp1"), path:document.getElementById("ring1"), fs:15.5, off:7 },
+  { el:document.getElementById("tp2"), path:document.getElementById("ring2"), fs:13,   off:3 },
+  { el:document.getElementById("tp3"), path:document.getElementById("ring3"), fs:11.5, off:11 },
 ];
 document.getElementById("ring1").setAttribute("d", buildRing(15));
 document.getElementById("ring2").setAttribute("d", buildRing(29));
 document.getElementById("ring3").setAttribute("d", buildRing(43));
 
+// Outline layer: split the & outline into its separate contours (outer body + the
+// two loop counters) and give EACH its own <textPath>, so a whole word never
+// straddles a contour break — that was the "words chopped off at the edges" artifact.
+const SVGNS="http://www.w3.org/2000/svg";
+const defs=document.querySelector("#cloud defs");
+const outlineLayer=document.getElementById("outlineLayer");
+const outlineSubs=(AMP_D.match(/M[^M]*/g)||[]).map((d,i)=>{
+  const pid="osub"+i;
+  const pth=document.createElementNS(SVGNS,"path");
+  pth.setAttribute("id",pid); pth.setAttribute("d",d); pth.setAttribute("fill","none");
+  defs.appendChild(pth);
+  const t=document.createElementNS(SVGNS,"text");
+  const tpath=document.createElementNS(SVGNS,"textPath");
+  tpath.setAttribute("href","#"+pid); tpath.setAttribute("startOffset","0");
+  t.appendChild(tpath); outlineLayer.appendChild(t);
+  return { tp:tpath, len:pth.getTotalLength() };
+});
+
 function fontFor(count, maxC){
-  const t = maxC<=1 ? 1 : Math.sqrt(count)/Math.sqrt(maxC);
+  // near-linear curve so a dominant answer is dramatically bigger than the rest
+  const t = maxC<=1 ? 1 : Math.pow(count/maxC, 0.72);
   return MINF + t*(MAXF-MINF);
 }
 // Round-robin order so popular answers recur and spread around the shape
@@ -286,28 +304,45 @@ function buildSequence(entries){
 }
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-// Fill one ring path with words, cycling the sequence until ~a full lap is laid.
-// Outline ring: per-word frequency sizing + rank colours. Inner rings: fixed
-// small size, inheriting their soft fill colour so they read as texture.
+// Fill one inner ring with words (fixed small size), cycling until ~a full lap.
 function fillRing(ring, seq, size, rank){
   const len = ring.path.getTotalLength();
   if(!len || !seq.length){ ring.el.textContent=""; return; }
   let frag="", adv=0, i=(ring.off||0), guard=0;
   while(adv < len*0.985 && guard<6000){
     const w=seq[i%seq.length]; i++; guard++;
-    const fs = ring.freq ? size.get(w) : ring.fs;
+    const fs = ring.fs;
     measure.font=`600 ${fs}px Georgia, serif`;
     const ww=measure.measureText(w+"  ").width;
     if(adv+ww > len) break;
-    if(ring.freq){
-      const col = rank.get(w) < RANK_COLORS.length ? RANK_COLORS[rank.get(w)] : REST_COLOR;
-      frag += `<tspan font-size="${fs.toFixed(1)}" fill="${col}">${esc(w)} </tspan>`;
-    } else {
-      frag += `<tspan font-size="${fs.toFixed(1)}">${esc(w)} </tspan>`;
-    }
+    frag += `<tspan font-size="${fs.toFixed(1)}">${esc(w)} </tspan>`;
     adv += ww;
   }
   ring.el.innerHTML=frag;
+}
+
+// Fill the outline contours with WHOLE words only (frequency-sized, rank-coloured).
+// A word that won't fit the space left on a contour is skipped, not clipped.
+function fillOutline(seq, size, rank){
+  let gi=0;
+  outlineSubs.forEach(sub=>{
+    let frag="", adv=0, miss=0, guard=0;
+    while(adv < sub.len && guard<1200){
+      guard++;
+      const w=seq[gi%seq.length];
+      const fs=size.get(w);
+      measure.font=`600 ${fs}px Georgia, serif`;
+      const ww=measure.measureText(w+" ").width;
+      // extra end-margin scaled to font size: glyphs spread on curves, so canvas
+      // width slightly under-reads the real advance — keeps big words off the edge
+      if(adv+ww <= sub.len - Math.max(6, fs*0.7)){
+        const col = rank.get(w) < RANK_COLORS.length ? RANK_COLORS[rank.get(w)] : REST_COLOR;
+        frag += `<tspan font-size="${fs.toFixed(1)}" fill="${col}">${esc(w)} </tspan>`;
+        adv += ww; gi++; miss=0;
+      } else { gi++; if(++miss>10) break; }   // too long here → try next word, then give up
+    }
+    sub.tp.innerHTML=frag;
+  });
 }
 
 function render(){
@@ -317,7 +352,10 @@ function render(){
   document.querySelectorAll("[data-c]").forEach(el=>{ el.textContent=counts[el.dataset.c]||0; });
 
   const entries=Object.entries(counts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
-  if(entries.length===0){ RINGS.forEach(r=>r.el.textContent=""); waiting.style.display=""; return; }
+  if(entries.length===0){
+    RINGS.forEach(r=>r.el.textContent=""); outlineSubs.forEach(s=>s.tp.textContent="");
+    waiting.style.display=""; return;
+  }
   waiting.style.display="none";
 
   const maxC=entries[0][1];
@@ -326,6 +364,7 @@ function render(){
   const base=buildSequence(entries);
 
   RINGS.forEach(ring=>fillRing(ring, base, size, rank));
+  fillOutline(base, size, rank);
 }
 
 /* =====================================================================
