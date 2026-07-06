@@ -111,16 +111,22 @@
       <div class="qt" id="d-qtitle"></div>
     </div>
 
-    <svg id="cloud" viewBox="0 0 1000 1000" preserveAspectRatio="xMidYMid meet">
+    <svg id="cloud" viewBox="0 -95 1000 1190" preserveAspectRatio="xMidYMid meet">
       <defs>
         <path id="ampPath" fill="none"></path>
+        <path id="ring1" fill="none"></path>
+        <path id="ring2" fill="none"></path>
+        <path id="ring3" fill="none"></path>
       </defs>
-      <path id="ampGhost" fill="none" stroke="rgba(255,255,255,.055)" stroke-width="2.5"></path>
+      <path id="ampGhost" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="2.5"></path>
       <text id="waiting" x="500" y="512" text-anchor="middle" fill="#6f778c" style="display:none"></text>
-      <text id="ampText" font-family="Georgia, 'Times New Roman', serif" font-weight="600"
-            fill="rgba(231,233,239,.80)">
-        <textPath id="ampTP" href="#ampPath" startOffset="0"></textPath>
-      </text>
+      <!-- inner filler rings (soft, uniform) render first, emphasis outline on top -->
+      <g font-family="Georgia, 'Times New Roman', serif" font-weight="600">
+        <text id="txt3" fill="rgba(231,233,239,.30)"><textPath id="tp3" href="#ring3" startOffset="0"></textPath></text>
+        <text id="txt2" fill="rgba(231,233,239,.42)"><textPath id="tp2" href="#ring2" startOffset="0"></textPath></text>
+        <text id="txt1" fill="rgba(231,233,239,.60)"><textPath id="tp1" href="#ring1" startOffset="0"></textPath></text>
+        <text id="ampText" fill="rgba(231,233,239,.85)"><textPath id="ampTP" href="#ampPath" startOffset="0"></textPath></text>
+      </g>
     </svg>
 
     <div class="foot" id="d-foot"></div>
@@ -226,10 +232,46 @@ window.addEventListener("storage",(e)=>{ if(e.key===CONFIG.storageKey){ counts=l
    ===================================================================== */
 document.getElementById("ampPath").setAttribute("d", AMP_D);
 document.getElementById("ampGhost").setAttribute("d", AMP_D);
-const tp      = document.getElementById("ampTP");
+const ampEl   = document.getElementById("ampPath");
 const waiting = document.getElementById("waiting");
 const measure = document.createElement("canvas").getContext("2d");
-const pathLen = document.getElementById("ampPath").getTotalLength();
+const pathLen = ampEl.getTotalLength();
+
+// ---- Concentric ring fill -------------------------------------------------
+// Words trace the outline, then 3 inset rings fill the strokes so the whole
+// glyph reads as SOLID words (a spiral fill), not just a single line. Each ring
+// is built by walking the outline, stepping inward along the normal, and keeping
+// only points that stay inside the glyph's fill.
+const AMP_FILL = new Path2D(AMP_D);
+const hit = document.createElement("canvas"); hit.width=1000; hit.height=1000;
+const hctx = hit.getContext("2d");
+function inFill(x,y){ return hctx.isPointInPath(AMP_FILL, x, y); }
+
+function buildRing(dist){
+  const step=2.4, N=Math.ceil(pathLen/step), polys=[]; let cur=[];
+  for(let i=0;i<=N;i++){
+    const L=Math.min(pathLen, i*step);
+    const p=ampEl.getPointAtLength(L);
+    const q=ampEl.getPointAtLength(Math.min(pathLen, L+1.2));
+    let tx=q.x-p.x, ty=q.y-p.y; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+    let nx=-ty, ny=tx;                                   // unit normal
+    if(!inFill(p.x+nx*2, p.y+ny*2)){ nx=-nx; ny=-ny; }   // point it INTO the stroke
+    const ox=p.x+nx*dist, oy=p.y+ny*dist;
+    if(inFill(ox,oy)){ cur.push([ox,oy]); }
+    else { if(cur.length>4) polys.push(cur); cur=[]; }   // left the stroke → break the run
+  }
+  if(cur.length>4) polys.push(cur);
+  return polys.map(poly=>"M"+poly.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join("L")).join(" ");
+}
+const RINGS = [
+  { el:document.getElementById("ampTP"), path:ampEl,                            freq:true },
+  { el:document.getElementById("tp1"),   path:document.getElementById("ring1"), fs:15.5, off:7 },
+  { el:document.getElementById("tp2"),   path:document.getElementById("ring2"), fs:13,   off:3 },
+  { el:document.getElementById("tp3"),   path:document.getElementById("ring3"), fs:11.5, off:11 },
+];
+document.getElementById("ring1").setAttribute("d", buildRing(15));
+document.getElementById("ring2").setAttribute("d", buildRing(29));
+document.getElementById("ring3").setAttribute("d", buildRing(43));
 
 function fontFor(count, maxC){
   const t = maxC<=1 ? 1 : Math.sqrt(count)/Math.sqrt(maxC);
@@ -244,6 +286,30 @@ function buildSequence(entries){
 }
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
+// Fill one ring path with words, cycling the sequence until ~a full lap is laid.
+// Outline ring: per-word frequency sizing + rank colours. Inner rings: fixed
+// small size, inheriting their soft fill colour so they read as texture.
+function fillRing(ring, seq, size, rank){
+  const len = ring.path.getTotalLength();
+  if(!len || !seq.length){ ring.el.textContent=""; return; }
+  let frag="", adv=0, i=(ring.off||0), guard=0;
+  while(adv < len*0.985 && guard<6000){
+    const w=seq[i%seq.length]; i++; guard++;
+    const fs = ring.freq ? size.get(w) : ring.fs;
+    measure.font=`600 ${fs}px Georgia, serif`;
+    const ww=measure.measureText(w+"  ").width;
+    if(adv+ww > len) break;
+    if(ring.freq){
+      const col = rank.get(w) < RANK_COLORS.length ? RANK_COLORS[rank.get(w)] : REST_COLOR;
+      frag += `<tspan font-size="${fs.toFixed(1)}" fill="${col}">${esc(w)} </tspan>`;
+    } else {
+      frag += `<tspan font-size="${fs.toFixed(1)}">${esc(w)} </tspan>`;
+    }
+    adv += ww;
+  }
+  ring.el.innerHTML=frag;
+}
+
 function render(){
   // panel: counts + total
   let total=0; CONFIG.options.forEach(o=>total+=counts[o]||0);
@@ -251,7 +317,7 @@ function render(){
   document.querySelectorAll("[data-c]").forEach(el=>{ el.textContent=counts[el.dataset.c]||0; });
 
   const entries=Object.entries(counts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
-  if(entries.length===0){ tp.textContent=""; waiting.style.display=""; return; }
+  if(entries.length===0){ RINGS.forEach(r=>r.el.textContent=""); waiting.style.display=""; return; }
   waiting.style.display="none";
 
   const maxC=entries[0][1];
@@ -259,20 +325,7 @@ function render(){
   const size=new Map(entries.map(([w,c])=>[w,fontFor(c,maxC)]));
   const base=buildSequence(entries);
 
-  // Fill the path: cycle the sequence, measuring each word, until we've
-  // laid down ~one full lap of the ampersand.
-  let frag="", adv=0, i=0, guard=0;
-  while(adv < pathLen*0.985 && guard<4000){
-    const w=base[i%base.length]; i++; guard++;
-    const fs=size.get(w);
-    measure.font=`600 ${fs}px Georgia, serif`;
-    const wWidth=measure.measureText(w+"  ").width;
-    if(adv+wWidth > pathLen) break;
-    const col = rank.get(w) < RANK_COLORS.length ? RANK_COLORS[rank.get(w)] : REST_COLOR;
-    frag += `<tspan font-size="${fs.toFixed(1)}" fill="${col}">${esc(w)} </tspan>`;
-    adv += wWidth;
-  }
-  tp.innerHTML=frag;
+  RINGS.forEach(ring=>fillRing(ring, base, size, rank));
 }
 
 /* =====================================================================
