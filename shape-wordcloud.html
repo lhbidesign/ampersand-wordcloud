@@ -55,12 +55,16 @@
 
   /* procedural cloud layers (feTurbulence → soft white clouds) that slowly drift */
   .clouds{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none;}
-  .clayer{position:absolute;top:-12%;left:0;width:230%;height:124%;}
-  .cA{opacity:.6; animation:cdriftA 170s linear infinite;}
-  .cB{opacity:.34;animation:cdriftB 250s linear infinite;}
-  @keyframes cdriftA{from{transform:translateX(0)}     to{transform:translateX(-52%)}}
-  @keyframes cdriftB{from{transform:translateX(-52%)}   to{transform:translateX(0)}}
-  @media (prefers-reduced-motion: reduce){ .cA,.cB{animation:none;} }
+  .clayer{position:absolute;inset:0;width:100%;height:100%;}   /* static — no drift */
+  .cA{opacity:.6;}
+  .cB{opacity:.34;}
+
+  /* occasional shooting star streaking across the sky */
+  .shooting-star{position:absolute;height:2px;z-index:0;pointer-events:none;border-radius:2px;
+    background:linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.9));
+    box-shadow:0 0 6px 1px rgba(255,255,255,.6);}
+  .shooting-star::after{content:"";position:absolute;right:-2px;top:50%;transform:translateY(-50%);
+    width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 12px 4px rgba(255,255,255,.9);}
 
   /* the uploaded shape, shown as a soft silhouette BEHIND the words */
   .shape-back{position:absolute;left:50%;top:53%;transform:translate(-50%,-50%);
@@ -214,6 +218,25 @@ const DEFAULT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 10
 // staggered anchor positions (%) — biggest word most central, rest scattered around
 const SLOTS = [ [50,49], [26,28], [74,27], [15,57], [85,54], [33,77], [67,79], [50,15] ];
 
+// a spread of distinct system-font personalities (self-contained, no web fonts).
+// each word is mapped to one by a hash, so a given word keeps its own character.
+const FONTS = [
+  "'Snell Roundhand','Brush Script MT',cursive",       // elegant script
+  "Georgia,'Times New Roman',serif",                    // classic serif
+  "'Trebuchet MS','Segoe UI',sans-serif",               // friendly sans
+  "'Baskerville','Palatino Linotype',serif",            // refined serif
+  "'Chalkboard SE','Comic Sans MS',cursive",            // playful
+  "'Copperplate','Copperplate Gothic Light',fantasy",   // engraved caps
+  "'Futura','Century Gothic',sans-serif",               // geometric
+  "'Courier New',monospace",                            // typewriter
+  "'Marker Felt','Comic Sans MS',cursive",              // hand-marker
+  "'Palatino Linotype','Palatino',serif"                // humanist serif
+];
+function fontForWord(w){
+  let h=0; for(let i=0;i<w.length;i++) h=(h*31+w.charCodeAt(i))>>>0;
+  return FONTS[h%FONTS.length];
+}
+
 /* =====================================================================
    STORE  (localStorage-backed, guarded for file:// / private mode)
    ===================================================================== */
@@ -238,11 +261,15 @@ function addWord(raw){
 }
 function reset(){ counts={}; saveCounts(); render(); }
 function simulate(n){
-  let s=987654;
-  const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+  // Give each candidate a fresh random "appeal" this run, so a DIFFERENT word tends
+  // to win each time (not always the same one), with a natural uneven spread.
+  const pool = CONFIG.sampleWords.slice();
+  const weights = pool.map(()=> Math.pow(Math.random(), 2.2));  // skew → a few stand out
+  const total = weights.reduce((a,b)=>a+b,0) || 1;
   for(let i=0;i<n;i++){
-    const idx=Math.floor(Math.pow(rnd(),2)*CONFIG.sampleWords.length);  // zipf-ish → clear winner
-    const w=normalize(CONFIG.sampleWords[idx]); if(w) counts[w]=(counts[w]||0)+1;
+    let r=Math.random()*total, k=0;
+    while(k<weights.length-1 && r>weights[k]){ r-=weights[k]; k++; }
+    const w=normalize(pool[k]); if(w) counts[w]=(counts[w]||0)+1;
   }
   saveCounts(); render();
 }
@@ -312,7 +339,7 @@ function render(){
     const dur  = (8.5 + (i%4)*1.7).toFixed(1);              // varied float speed
     const delay= (-(i*1.9+1)).toFixed(1);                   // stagger the motion
     return `<div class="word" style="left:${slot[0]}%;top:${slot[1]}%">`
-         + `<span class="wi" style="font-size:${size}vmin;--dur:${dur}s;--delay:${delay}s">${esc(word)}</span>`
+         + `<span class="wi" style="font-size:${size}vmin;--dur:${dur}s;--delay:${delay}s;font-family:${fontForWord(word)}">${esc(word)}</span>`
          + `</div>`;
   }).join("");
 }
@@ -381,6 +408,38 @@ const savedShape=lsGet(CONFIG.shapeKey);
 loadShape(savedShape || DEFAULT_SVG);
 if(savedShape) markShapeLoaded();
 render();
+
+/* ---- occasional shooting star (display only) ---- */
+const stageEl=document.getElementById("stage");
+const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function shootStar(){
+  const r=stageEl.getBoundingClientRect(), Wd=r.width, Hd=r.height;
+  if(!Wd||!Hd) return;
+  const dir = Math.random()<0.5 ? 1 : -1;
+  const len = 150 + Math.random()*150;
+  const startX = dir>0 ? Wd*(0.02+Math.random()*0.35) : Wd*(0.63+Math.random()*0.35);
+  const startY = Hd*(0.05+Math.random()*0.30);
+  const dist = Wd*(0.45+Math.random()*0.30);
+  const ang = (18+Math.random()*16)*Math.PI/180;          // gentle downward slope
+  const dx = dir*dist, dy = dist*Math.tan(ang);
+  const travelAngle = Math.atan2(dy, dx)*180/Math.PI;
+  const el=document.createElement("div");
+  el.className="shooting-star";
+  el.style.left=startX+"px"; el.style.top=startY+"px"; el.style.width=len+"px";
+  stageEl.appendChild(el);
+  el.animate([
+    {transform:`rotate(${travelAngle}deg) translateX(0)`, opacity:0},
+    {opacity:1, offset:0.12},
+    {opacity:1, offset:0.75},
+    {transform:`rotate(${travelAngle}deg) translateX(${Math.hypot(dx,dy)}px)`, opacity:0}
+  ], {duration: 850+Math.random()*550, easing:"ease-in", fill:"forwards"});
+  setTimeout(()=>el.remove(), 1800);
+}
+function scheduleStar(){
+  const delay = 7000 + Math.random()*14000;   // roughly every 7–21s
+  setTimeout(()=>{ if(!document.hidden) shootStar(); scheduleStar(); }, delay);
+}
+if(mode!=="input" && !reduceMotion){ setTimeout(shootStar, 2500); scheduleStar(); }
 
 if(!storageOK){
   const note=document.getElementById("sync-note");
