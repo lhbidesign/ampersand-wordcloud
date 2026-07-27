@@ -203,7 +203,7 @@ const CONFIG = {
   storageKey: "swc_counts_v1",
   shapeKey:   "swc_shape_v1",
   promptKey:  "swc_prompt_v1",
-  maxWords:   5,   // only the top few words float on screen
+  maxWords:   8,   // how many of the top words float on screen
   sampleWords: ["Dream","Bright","Together","Wonder","Uplift","Boundless","Hope","Soar",
     "Bold","Playful","Radiant","Free"]
 };
@@ -212,7 +212,7 @@ const CONFIG = {
 const DEFAULT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,2 62,37 99,38 69,60 80,97 50,74 20,97 31,60 1,38 38,37" fill="#000"/></svg>';
 
 // staggered anchor positions (%) — biggest word most central, rest scattered around
-const SLOTS = [ [50,49], [28,31], [72,34], [33,68], [70,65], [50,84] ];
+const SLOTS = [ [50,49], [26,28], [74,27], [15,57], [85,54], [33,77], [67,79], [50,15] ];
 
 /* =====================================================================
    STORE  (localStorage-backed, guarded for file:// / private mode)
