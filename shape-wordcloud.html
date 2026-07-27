@@ -45,19 +45,15 @@
   .total{font-size:13px;color:var(--muted);}
   .total b{color:var(--text)}
 
-  /* ---------- display stage: sky ---------- */
-  .stage{position:relative;overflow:hidden;
-     background:linear-gradient(180deg,#3f8ad9 0%,#5f9fe4 34%,#8fbeee 68%,#bcdcf5 100%);}
+  /* ---------- display stage: flower-cloud image background ---------- */
+  .stage{position:relative;overflow:hidden;background:#0a0e16;}
 
-  .sun{position:absolute;top:10%;right:16%;width:180px;height:180px;border-radius:50%;z-index:0;
-    background:radial-gradient(circle,rgba(255,253,244,.95),rgba(255,249,224,.35) 45%,transparent 70%);
-    pointer-events:none;}
-
-  /* procedural cloud layers (feTurbulence → soft white clouds) that slowly drift */
-  .clouds{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none;}
-  .clayer{position:absolute;inset:0;width:100%;height:100%;}   /* static — no drift */
-  .cA{opacity:.6;}
-  .cB{opacity:.34;}
+  /* background image, slightly oversized so it can float without revealing edges */
+  .bg{position:absolute;inset:-3%;z-index:0;pointer-events:none;
+    background:url("assets/flower-cloud.png") center center / cover no-repeat;
+    animation:bgfloat 8s ease-in-out infinite;}
+  @keyframes bgfloat{0%{transform:translateY(0)}50%{transform:translateY(-14px)}100%{transform:translateY(0)}}
+  @media (prefers-reduced-motion: reduce){ .bg{animation:none;} }
 
   /* occasional shooting star streaking across the sky */
   .shooting-star{position:absolute;height:2px;z-index:0;pointer-events:none;border-radius:2px;
@@ -67,20 +63,21 @@
     width:6px;height:6px;border-radius:50%;background:#fff;box-shadow:0 0 12px 4px rgba(255,255,255,.9);}
 
   /* the uploaded shape, shown as a soft silhouette BEHIND the words */
-  .shape-back{position:absolute;left:50%;top:53%;transform:translate(-50%,-50%);
-    width:auto;height:auto;max-width:66%;max-height:76%;z-index:1;pointer-events:none;
-    opacity:.62; filter:brightness(0) invert(1) drop-shadow(0 10px 40px rgba(35,68,116,.5));}
+  /* SVG shape silhouette hidden — the flower-cloud image is the backdrop now */
+  .shape-back{display:none;}
 
   /* floating words layer */
   .words{position:absolute;inset:0;z-index:2;pointer-events:none;}
   .word{position:absolute;transform:translate(-50%,-50%);white-space:nowrap;}
   .word .wi{display:inline-block;font-weight:600;letter-spacing:.005em;color:#ffffff;
+    /* dark aura hugging the letters keeps white text legible on the bright cloud,
+       while the soft outer glow keeps it luminous over the darker edges */
     text-shadow:
-      0 1px 2px rgba(22,44,74,.5),
-      0 3px 18px rgba(22,44,74,.4),
-      0 0 26px rgba(255,255,255,.9),
-      0 0 60px rgba(205,228,255,.75),
-      0 0 110px rgba(180,215,255,.5);
+      0 0 3px rgba(12,24,45,.9),
+      0 0 8px rgba(12,24,45,.75),
+      0 1px 3px rgba(12,24,45,.8),
+      0 0 30px rgba(255,255,255,.55),
+      0 0 66px rgba(190,218,255,.5);
     animation:floaty var(--dur,10s) ease-in-out var(--delay,0s) infinite;}
   @keyframes floaty{
     0%{transform:translate(0,0) rotate(0deg)}
@@ -158,25 +155,7 @@
 
   <!-- DISPLAY STAGE -->
   <main class="stage" id="stage">
-    <div class="sun"></div>
-    <div class="clouds">
-      <svg class="clayer cA" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        <defs><filter id="cloudA" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.005" numOctaves="5" seed="12" stitchTiles="stitch" result="n"/>
-          <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.7 1.15" result="c"/>
-          <feGaussianBlur in="c" stdDeviation="1.4"/>
-        </filter></defs>
-        <rect width="100%" height="100%" filter="url(#cloudA)"/>
-      </svg>
-      <svg class="clayer cB" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
-        <defs><filter id="cloudB" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.011" numOctaves="4" seed="41" stitchTiles="stitch" result="n"/>
-          <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 -1.9 1.2" result="c"/>
-          <feGaussianBlur in="c" stdDeviation="1"/>
-        </filter></defs>
-        <rect width="100%" height="100%" filter="url(#cloudB)"/>
-      </svg>
-    </div>
+    <div class="bg" id="bg"></div>
 
     <img class="shape-back" id="shapeBack" alt="">
     <div class="words" id="words"></div>
